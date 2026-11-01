@@ -3,6 +3,8 @@
 Ein nativer Windows-Editor für Notizen und Markdown – schnell wie ein einfacher Texteditor, aber mit
 Formatierung beim Tippen, Diagrammen und Prozess-Werkzeugen.
 
+![Folio mit einer formatierten Notiz](docs/editor-hell.png)
+
 ## Funktionen
 
 - **Formatierung beim Tippen**: Überschriften, **fett**, *kursiv*, `Code`, Listen, anklickbare Aufgaben, Zitate,
@@ -19,6 +21,65 @@ Formatierung beim Tippen, Diagrammen und Prozess-Werkzeugen.
 - **Export als BPMN 2.0** (`.bpmn`) zum Öffnen im Camunda Modeler: Bahnen werden Lanes, Entscheidungen Gateways.
 - **Vorlagen**: Prozess-Steckbrief, SIPOC, RACI, Agent-Steckbrief.
 - Hell (Standard) und Dunkel, gleitender Cursor und weich einblendende Zeichen (abschaltbar).
+
+## So sieht es aus
+
+### Hell und Dunkel
+
+| Hell | Dunkel |
+| --- | --- |
+| ![Hell](docs/editor-hell.png) | ![Dunkel](docs/editor-dunkel.png) |
+
+Umschalten über den Mond bzw. die Sonne oben rechts – ohne Neustart.
+
+### Ablaufdiagramm mit Bahnen und Prozesszeiten
+
+![Ablaufdiagramm mit Bahnen](docs/diagramm-bahnen.png)
+
+Das Diagramm ist ganz normaler Mermaid-Text. Die Zeiten stehen als Kommentar darin – Folio zeigt sie an den Schritten,
+rechnet die Summen in der Fußzeile und markiert den längsten Pfad:
+
+````markdown
+```mermaid
+---
+title: Online-Bestellung abwickeln
+---
+flowchart LR
+  subgraph Kunde
+    A([Bestellung aufgeben]) --> B[Zahlungsart wählen]
+  end
+  subgraph Web [Onlineshop]
+    C[Bestellung prüfen]
+  end
+  subgraph Lager [Lagersystem]
+    D[(Bestand abfragen)]
+  end
+  subgraph Versand
+    E[Ware zusammenstellen] --> F{Alles vorrätig?}
+    F -->|ja| G[Paket packen]
+    F -->|nein| H[Ware nachbestellen]
+    G --> Z([Paket verschickt])
+  end
+  B --> C --> D --> E
+  H -.-> D
+  %% zeit B 1 min
+  %% zeit E 10 min
+  %% liegezeit H D 2 h
+```
+````
+
+Über das Menü „…“ → „Ablauf als BPMN exportieren“ wird daraus eine `.bpmn`-Datei mit einer Lane pro Bahn.
+
+### Sequenzdiagramm
+
+![Sequenzdiagramm im dunklen Design](docs/diagramm-sequenz.png)
+
+### Markdown-Spickzettel
+
+![Markdown-Spickzettel neben einer Notiz](docs/spickzettel.png)
+
+Mit F1 oder „?“ oben rechts. Ein Klick auf eine Zeile fügt das Element an der Cursorposition ein –
+dort finden sich auch alle Diagramm- und Prozessvorlagen.
 
 ## Installation
 
