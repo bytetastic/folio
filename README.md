@@ -109,3 +109,7 @@ Windows zeigt beim ersten Start einer heruntergeladenen Datei eventuell die Smar
 | Strg+Mausrad, Strg+0 | Zoom |
 
 Verwendet [AvalonEdit](https://github.com/icsharpcode/AvalonEdit) und [Markdig](https://github.com/xoofx/markdig).
+
+## Lizenz
+
+[MIT](LICENSE)
