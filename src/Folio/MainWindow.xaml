@@ -1,0 +1,252 @@
+<Window x:Class="Folio.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Folio" Width="1180" Height="780" MinWidth="560" MinHeight="380"
+        Background="Transparent" FontFamily="{StaticResource UiFont}" Foreground="{DynamicResource TextBrush}"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Ideal" AllowDrop="True">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="-1" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid x:Name="Root" Background="{DynamicResource WindowBrush}">
+        <Grid x:Name="Shell" RenderTransformOrigin="0.5,0">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="ShellShift"/>
+            </Grid.RenderTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="34"/>
+            </Grid.RowDefinitions>
+
+            <!-- ───────── Titelleiste mit Tabs ───────── -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Logo: Blatt mit Eselsohr und Lesezeichen -->
+                <Viewbox Grid.Column="0" Width="22" Height="22" Margin="15,2,10,0" VerticalAlignment="Center" ToolTip="Folio">
+                    <Canvas Width="32" Height="32" ClipToBounds="False">
+                        <Rectangle Width="32" Height="32" RadiusX="8" RadiusY="8">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#5C7BFF" Offset="0"/>
+                                    <GradientStop Color="#3446C9" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <Path Fill="White" Data="M10,7 H19 L23,11 V25 Q23,26 22,26 H11 Q10,26 10,25 Z"/>
+                        <Path Fill="#C9D3FF" Data="M19,7 V10 Q19,11 20,11 H23 Z"/>
+                        <Rectangle Canvas.Left="12.5" Canvas.Top="15.2" Width="8" Height="1.7" RadiusX="0.85" RadiusY="0.85" Fill="#3D5AD6" Opacity="0.6"/>
+                        <Rectangle Canvas.Left="12.5" Canvas.Top="18.6" Width="8" Height="1.7" RadiusX="0.85" RadiusY="0.85" Fill="#3D5AD6" Opacity="0.45"/>
+                        <Rectangle Canvas.Left="12.5" Canvas.Top="22" Width="5.2" Height="1.7" RadiusX="0.85" RadiusY="0.85" Fill="#3D5AD6" Opacity="0.45"/>
+                        <Path x:Name="LogoRibbon" Fill="#F0A73A" Data="M13.2,7 V13 L14.7,11.8 L16.2,13 V7 Z">
+                            <Path.RenderTransform>
+                                <TranslateTransform x:Name="RibbonShift"/>
+                            </Path.RenderTransform>
+                        </Path>
+                    </Canvas>
+                </Viewbox>
+
+                <!-- Tabs: die Hervorhebung ist ein eigenes Element und gleitet zum gewählten Tab -->
+                <Grid Grid.Column="1" x:Name="TabStrip" ClipToBounds="True" Margin="0,6,0,0">
+                    <Canvas x:Name="TabHighlightLayer" IsHitTestVisible="False">
+                        <Border x:Name="TabHighlight" Height="34" CornerRadius="9" Background="{DynamicResource PaperBrush}"
+                                BorderBrush="{DynamicResource PaperBorderBrush}" BorderThickness="1" Opacity="0">
+                            <Border.CacheMode>
+                                <BitmapCache/>
+                            </Border.CacheMode>
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="10" ShadowDepth="1" Direction="270" Opacity="{DynamicResource ShadowOpacity}" Color="{DynamicResource ShadowColor}"/>
+                            </Border.Effect>
+                        </Border>
+                    </Canvas>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+                        <StackPanel x:Name="TabPanel" Orientation="Horizontal"/>
+                        <Button x:Name="AddTabButton" Style="{StaticResource IconButton}" Content="&#xE710;" FontSize="12"
+                                Margin="4,1,0,0" ToolTip="Neue Notiz (Strg+N)"/>
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="8,6,6,0">
+                    <Button x:Name="UpdateButton" Visibility="Collapsed" Style="{StaticResource PrimaryButton}" Padding="12,5" FontSize="12"
+                            Margin="0,1,8,0" VerticalAlignment="Center"/>
+                    <Button x:Name="HelpButton" Style="{StaticResource IconButton}" Content="&#xE897;" ToolTip="Markdown-Spickzettel (F1)"/>
+                    <Button x:Name="ThemeButton" Style="{StaticResource IconButton}" Content="&#xE708;" ToolTip="Dunkel / Hell"/>
+                    <Button x:Name="MenuButton" Style="{StaticResource IconButton}" Content="&#xE712;" ToolTip="Menü"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button x:Name="MinButton" Style="{StaticResource CaptionButton}" Content="&#xE921;" ToolTip="Minimieren"/>
+                    <Button x:Name="MaxButton" Style="{StaticResource CaptionButton}" Content="&#xE922;" ToolTip="Maximieren"/>
+                    <Button x:Name="CloseButton" Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;" ToolTip="Schließen"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ───────── Papier ───────── -->
+            <Border Grid.Row="1" x:Name="PaperShadow" Margin="8,0,8,0" CornerRadius="10" Background="{DynamicResource PaperBrush}">
+                <!-- Schatten zwischenspeichern: sonst rechnet WPF ihn bei jeder Änderung im Papier neu -->
+                <Border.CacheMode>
+                    <BitmapCache/>
+                </Border.CacheMode>
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="2" Direction="270" Opacity="{DynamicResource ShadowOpacity}" Color="{DynamicResource ShadowColor}"/>
+                </Border.Effect>
+            </Border>
+            <Border Grid.Row="1" x:Name="Paper" Margin="8,0,8,0" CornerRadius="10" Background="{DynamicResource PaperBrush}"
+                    BorderBrush="{DynamicResource PaperBorderBrush}" BorderThickness="1" ClipToBounds="True">
+                <Grid>
+                    <Grid x:Name="EditorHost">
+                        <Grid.RenderTransform>
+                            <TranslateTransform x:Name="EditorShift"/>
+                        </Grid.RenderTransform>
+                    </Grid>
+
+                    <!-- Hinweisleiste oben im Papier (Installieren, Update, Datei geändert …) -->
+                    <Border x:Name="InfoBar" VerticalAlignment="Top" Margin="14,12,22,0" Padding="14,9,8,9" CornerRadius="10"
+                            Background="{DynamicResource PaperBrush}" BorderBrush="{DynamicResource Accent24Brush}" BorderThickness="1"
+                            Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="InfoShift"/>
+                        </Border.RenderTransform>
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="{DynamicResource ShadowOpacity}" Color="{DynamicResource ShadowColor}"/>
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="26" Height="26" CornerRadius="13" Background="{DynamicResource Accent14Brush}" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock x:Name="InfoIcon" Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="13"
+                                           Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="InfoTitle" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="InfoText" FontSize="12" Foreground="{DynamicResource TextDimBrush}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" x:Name="InfoButtons" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                            <Button Grid.Column="3" x:Name="InfoClose" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10"
+                                    Width="28" Height="28" VerticalAlignment="Center" ToolTip="Ausblenden"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- kurze Rückmeldung unten (z. B. „Gespeichert“) -->
+                    <Border x:Name="Toast" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,18" Padding="14,7"
+                            CornerRadius="16" Background="{DynamicResource TextBrush}" Visibility="Collapsed" IsHitTestVisible="False">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="ToastShift"/>
+                        </Border.RenderTransform>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="ToastIcon" Text="&#xE73E;" FontFamily="{StaticResource IconFont}" FontSize="12"
+                                       Foreground="{DynamicResource PaperBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="ToastText" FontSize="12.5" Foreground="{DynamicResource PaperBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Markdown-Spickzettel (F1): gleitet von rechts herein, ein Klick fügt das Zeichen ein -->
+                    <Border x:Name="HelpPanel" HorizontalAlignment="Right" Width="304" Margin="0,10,10,10" CornerRadius="10"
+                            Background="{DynamicResource PaperBrush}" BorderBrush="{DynamicResource PaperBorderBrush}" BorderThickness="1"
+                            Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="HelpShift"/>
+                        </Border.RenderTransform>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Margin="16,12,8,6">
+                                <StackPanel>
+                                    <TextBlock Text="Markdown-Spickzettel" FontFamily="{StaticResource DisplayFont}" FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Klick auf eine Zeile fügt sie ein" FontSize="11.5" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <Button x:Name="HelpClose" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10" Width="28" Height="28"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top" ToolTip="Ausblenden (F1)"/>
+                            </Grid>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                                <StackPanel x:Name="HelpItems" Margin="0,0,0,10"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- ───────── Statusleiste ───────── -->
+            <Grid Grid.Row="2" Margin="14,0,12,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Live | Quelltext | Lesen – die Hervorhebung gleitet -->
+                <Grid x:Name="ModeSwitch" VerticalAlignment="Center">
+                    <Canvas IsHitTestVisible="False">
+                        <Border x:Name="ModeHighlight" Height="22" CornerRadius="6" Background="{DynamicResource PaperBrush}"
+                                BorderBrush="{DynamicResource PaperBorderBrush}" BorderThickness="1"/>
+                    </Canvas>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="ModeLive" Style="{StaticResource SegmentButton}" GroupName="Mode" Content="Live" ToolTip="Formatierung beim Tippen"/>
+                        <RadioButton x:Name="ModeSource" Style="{StaticResource SegmentButton}" GroupName="Mode" Content="Quelltext" ToolTip="Alle Markdown-Zeichen zeigen (Strg+Umschalt+E)"/>
+                        <RadioButton x:Name="ModeRead" Style="{StaticResource SegmentButton}" GroupName="Mode" Content="Lesen" ToolTip="Nur lesen (Strg+E)"/>
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusPosition" FontSize="12" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <TextBlock x:Name="StatusWords" FontSize="12" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <Button x:Name="ZoomButton" Style="{StaticResource StatusButton}" ToolTip="Zoom zurücksetzen (Strg+0)" Visibility="Collapsed"/>
+                    <Button x:Name="LineEndingButton" Style="{StaticResource StatusButton}" ToolTip="Zeilenende umstellen"/>
+                    <TextBlock x:Name="StatusEncoding" FontSize="12" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- ───────── Menü ───────── -->
+        <Popup x:Name="MenuPopup" PlacementTarget="{Binding ElementName=MenuButton}" Placement="Bottom" HorizontalOffset="-240"
+               VerticalOffset="4" AllowsTransparency="True" StaysOpen="False" PopupAnimation="None">
+            <Border x:Name="MenuCard" Margin="12" Padding="0,5" Width="300" CornerRadius="10" Background="{DynamicResource PaperBrush}"
+                    BorderBrush="{DynamicResource PaperBorderBrush}" BorderThickness="1" RenderTransformOrigin="1,0">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="MenuScale"/>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="3" Direction="270" Opacity="{DynamicResource ShadowOpacity}" Color="{DynamicResource ShadowColor}"/>
+                </Border.Effect>
+                <StackPanel x:Name="MenuItems"/>
+            </Border>
+        </Popup>
+
+        <!-- ───────── Dialog ───────── -->
+        <Grid x:Name="DialogLayer" Visibility="Collapsed">
+            <Border x:Name="DialogDim" Background="#40101828"/>
+            <Border x:Name="DialogCard" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" MinWidth="360" Margin="24"
+                    Padding="24,22,24,20" CornerRadius="14" Background="{DynamicResource PaperBrush}" BorderBrush="{DynamicResource PaperBorderBrush}"
+                    BorderThickness="1" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="DialogScale"/>
+                </Border.RenderTransform>
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="30" ShadowDepth="6" Direction="270" Opacity="0.22" Color="{DynamicResource ShadowColor}"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock x:Name="DialogTitle" FontFamily="{StaticResource DisplayFont}" FontSize="19" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="DialogText" Margin="0,10,0,0" FontSize="13.5" LineHeight="20" Foreground="{DynamicResource TextDimBrush}" TextWrapping="Wrap"/>
+                    <StackPanel x:Name="DialogExtra" Margin="0,8,0,0"/>
+                    <StackPanel x:Name="DialogButtons" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Standbild für die Überblendung beim Themenwechsel -->
+        <Image x:Name="ThemeFade" Visibility="Collapsed" IsHitTestVisible="False" Stretch="Fill"/>
+    </Grid>
+</Window>
