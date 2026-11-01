@@ -18,7 +18,11 @@ Formatierung beim Tippen, Diagrammen und Prozess-Werkzeugen.
   Ablaufdiagramme mit Bahnen (`subgraph`), Sequenzdiagramme, Balken- und Tortendiagramme.
 - **Prozesszeiten**: `%% zeit B 5 min` (Bearbeitungszeit) und `%% liegezeit A B 2 h` (Wartezeit) – Folio zeigt sie an
   den Schritten, rechnet Summen und hebt den längsten Pfad hervor. Andere Programme ignorieren diese Zeilen.
+- **Große Diagramme bleiben lesbar**: Im Text wird nie unter 70 % verkleinert – was nicht passt, lässt sich mit
+  Umschalt+Mausrad oder der Leiste darunter verschieben. Der Knopf oben rechts öffnet den **Viewer**: Mausrad zoomt,
+  Ziehen verschiebt, Doppelklick wechselt zwischen „Einpassen“ und 100 %.
 - **Export als BPMN 2.0** (`.bpmn`) zum Öffnen im Camunda Modeler: Bahnen werden Lanes, Entscheidungen Gateways.
+- **Export als Bild**: jedes Diagramm als PNG (doppelte Auflösung) oder SVG (Vektorgrafik) – im Viewer oder über das Menü.
 - **Vorlagen**: Prozess-Steckbrief, SIPOC, RACI, Agent-Steckbrief.
 - Hell (Standard) und Dunkel, gleitender Cursor und weich einblendende Zeichen (abschaltbar).
 

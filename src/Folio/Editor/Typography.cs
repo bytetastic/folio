@@ -11,6 +11,7 @@ public static class Typography
     public static readonly FontFamily Body = new("Segoe UI Variable Text, Segoe UI");
     public static readonly FontFamily Display = new("Segoe UI Variable Display, Segoe UI");
     public static readonly FontFamily Mono = new("Cascadia Mono, Consolas");
+    public static readonly Typeface IconFace = new(new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
     /// <summary>Größe einer Überschrift relativ zum Fließtext.</summary>
     public static double HeadingScale(int level) => level switch

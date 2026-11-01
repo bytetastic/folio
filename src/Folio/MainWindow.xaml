@@ -138,8 +138,8 @@
                         </Grid>
                     </Border>
 
-                    <!-- kurze Rückmeldung unten (z. B. „Gespeichert“) -->
-                    <Border x:Name="Toast" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,18" Padding="14,7"
+                    <!-- kurze Rückmeldung unten (z. B. „Gespeichert“) – liegt auch über dem Diagramm-Viewer -->
+                    <Border x:Name="Toast" Panel.ZIndex="20" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,18" Padding="14,7"
                             CornerRadius="16" Background="{DynamicResource TextBrush}" Visibility="Collapsed" IsHitTestVisible="False">
                         <Border.RenderTransform>
                             <TranslateTransform x:Name="ToastShift"/>
@@ -176,6 +176,49 @@
                             </ScrollViewer>
                         </Grid>
                     </Border>
+
+                    <!-- Diagramm-Viewer: deckt das Papier ab, Mausrad zoomt, Ziehen verschiebt, Esc schließt -->
+                    <Grid x:Name="ViewerLayer" Panel.ZIndex="10" Visibility="Collapsed" Background="{DynamicResource PaperBrush}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid Margin="18,10,10,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="&#xE9D2;" FontFamily="{StaticResource IconFont}" FontSize="14" Foreground="{DynamicResource AccentBrush}"
+                                           VerticalAlignment="Center" Margin="0,1,10,0"/>
+                                <TextBlock x:Name="ViewerTitle" FontFamily="{StaticResource DisplayFont}" FontSize="15" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="ViewerZoomOut" Style="{StaticResource IconButton}" Content="&#xE738;" FontSize="11" ToolTip="Verkleinern (−)"/>
+                                <TextBlock x:Name="ViewerZoomText" Width="48" TextAlignment="Center" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextDimBrush}"/>
+                                <Button x:Name="ViewerZoomIn" Style="{StaticResource IconButton}" Content="&#xE710;" FontSize="11" ToolTip="Vergrößern (+)"/>
+                                <Button x:Name="ViewerFit" Style="{StaticResource GhostButton}" Content="Einpassen" Padding="10,4" FontSize="12" Margin="6,0,0,0" ToolTip="Ganzes Diagramm zeigen (0)"/>
+                                <Button x:Name="ViewerActual" Style="{StaticResource GhostButton}" Content="100 %" Padding="10,4" FontSize="12" Margin="4,0,0,0" ToolTip="Originalgröße (1)"/>
+                                <Border Width="1" Height="18" Margin="10,0" Background="{DynamicResource PaperBorderBrush}"/>
+                                <Button x:Name="ViewerPng" Style="{StaticResource GhostButton}" Content="PNG" Padding="10,4" FontSize="12" ToolTip="Als PNG speichern (doppelte Auflösung)"/>
+                                <Button x:Name="ViewerSvg" Style="{StaticResource GhostButton}" Content="SVG" Padding="10,4" FontSize="12" Margin="4,0,0,0" ToolTip="Als SVG speichern (Vektorgrafik)"/>
+                                <Button x:Name="ViewerBpmn" Style="{StaticResource GhostButton}" Content="BPMN" Padding="10,4" FontSize="12" Margin="4,0,0,0" ToolTip="Als BPMN 2.0 exportieren (Camunda)"/>
+                                <Button x:Name="ViewerClose" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="11" Margin="8,0,0,0" ToolTip="Schließen (Esc)"/>
+                            </StackPanel>
+                        </Grid>
+                        <Border Grid.Row="1" Margin="10,0,10,0" CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource PaperBorderBrush}"
+                                Background="{DynamicResource WindowBrush}" ClipToBounds="True">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="ViewerScale" CenterX="0" CenterY="0"/>
+                            </Border.RenderTransform>
+                            <Grid x:Name="ViewerHost"/>
+                        </Border>
+                        <TextBlock Grid.Row="2" Margin="20,7,20,9" FontSize="11.5" Foreground="{DynamicResource TextFaintBrush}"
+                                   Text="Mausrad: zoomen  ·  Ziehen: verschieben  ·  Doppelklick: einpassen / 100 %  ·  Esc: schließen"/>
+                    </Grid>
                 </Grid>
             </Border>
 

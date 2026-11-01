@@ -116,6 +116,9 @@ public sealed class FolioEditor : TextEditor
         area.TextEntered += (_, _) => _typing = false;
         area.PreviewMouseLeftButtonDown += OnAreaMouseDown;
         area.MouseMove += OnAreaMouseMove;
+        area.PreviewMouseMove += OnAreaPreviewMouseMove;
+        area.PreviewMouseLeftButtonUp += OnAreaPreviewMouseUp;
+        area.MouseLeave += (_, _) => { if (_dragDiagram == null) SetHover(null, false); };
         area.PreviewKeyDown += OnAreaKeyDown;
         IsKeyboardFocusWithinChanged += (_, _) => UpdateCaretVisibility();
         DocumentChanged += (_, _) => AttachDocument(Document);
@@ -439,6 +442,180 @@ public sealed class FolioEditor : TextEditor
         return busy;
     }
 
+    // ───────────────────────────── Diagramme: Verschieben, Knopf, Viewer ─────────────────────────────
+
+    readonly Dictionary<int, double> _diagramScroll = new();
+    readonly Dictionary<int, DiagramElement.DiagramRun> _lastDrawn = new();
+
+    /// <summary>Vom Diagramm beim Zeichnen gerufen: seine Flächen für Mausklicks merken.</summary>
+    internal void NoteDiagramDrawn(int hash, DiagramElement.DiagramRun run)
+    {
+        if (_lastDrawn.Count > 64) _lastDrawn.Clear();
+        _lastDrawn[hash] = run;
+    }
+    int? _dragDiagram;
+    double _dragStartX, _dragStartOff;
+
+    /// <summary>Viewer für dieses Diagramm öffnen (Quelltext des Blocks).</summary>
+    public event Action<string>? DiagramOpenRequested;
+
+    /// <summary>Diagramm unter der Maus (Fingerabdruck) – zeigt Knopf und hervorgehobene Leiste.</summary>
+    public int? HoverDiagram { get; private set; }
+    public bool HoverDiagramButton { get; private set; }
+
+    /// <summary>Waagerechte Verschiebung eines zu breiten Diagramms (in Bildschirmpixeln).</summary>
+    public double DiagramScroll(int hash) => _diagramScroll.TryGetValue(hash, out var v) ? v : 0;
+
+    readonly record struct DiagramHit(DiagramElement Element, DiagramElement.DiagramRun Run, Point Local, VisualLine Line);
+
+    /// <summary>Welches gezeichnete Diagramm liegt unter dem Punkt (in TextView-Koordinaten)?</summary>
+    DiagramHit? DiagramAt(Point pInView)
+    {
+        var view = TextArea.TextView;
+        if (!view.VisualLinesValid) view.EnsureVisualLines();
+        var vl = view.GetVisualLineFromVisualTop(pInView.Y + view.VerticalOffset);
+        if (vl == null) return null;
+        foreach (var el in vl.Elements)
+        {
+            if (el is not DiagramElement de) continue;
+            // Ein frisch aufgebautes Element ist evtl. noch nicht gezeichnet → Flächen vom letzten Zeichnen nehmen
+            var run = de.Run is { Drawn: true } r ? r : _lastDrawn.GetValueOrDefault(de.Hash);
+            if (run == null) continue;
+            var tl = vl.GetTextLine(de.VisualColumn);
+            double lineTop = vl.GetTextLineVisualYPosition(tl, VisualYPosition.LineTop) - view.VerticalOffset;
+            var local = new Point(pInView.X + view.HorizontalOffset, pInView.Y - lineTop);
+            if (run.LocalBounds.Contains(local)) return new DiagramHit(de, run, local, vl);
+        }
+        return null;
+    }
+
+    void RedrawDiagram(int hash)
+    {
+        var view = TextArea.TextView;
+        if (!view.VisualLinesValid) { view.Redraw(); return; }
+        foreach (var vl in view.VisualLines)
+            foreach (var el in vl.Elements)
+                if (el is DiagramElement de && de.Hash == hash) { view.Redraw(vl); break; }
+    }
+
+    void SetHover(int? hash, bool onButton)
+    {
+        if (hash == HoverDiagram && onButton == HoverDiagramButton) return;
+        var old = HoverDiagram;
+        HoverDiagram = hash;
+        HoverDiagramButton = onButton;
+        if (old is { } o) RedrawDiagram(o);
+        if (hash is { } h && h != old) RedrawDiagram(h);
+        else if (hash is { } h2) RedrawDiagram(h2);
+    }
+
+    void ScrollDiagram(DiagramHit hit, double offset)
+    {
+        double v = Math.Clamp(offset, 0, hit.Run.ScrollMax);
+        if (Math.Abs(v - DiagramScroll(hit.Element.Hash)) < 0.1) return;
+        _diagramScroll[hit.Element.Hash] = v;
+        RedrawDiagram(hit.Element.Hash);
+    }
+
+    /// <summary>Maus gedrückt über einem Diagramm: Knopf/Hinweis öffnet den Viewer, die Leiste lässt sich ziehen.
+    /// Ein Klick ins Bild selbst bleibt wie bisher (Cursor in den Block → Quelltext bearbeiten).</summary>
+    bool DiagramMouseDown(Point p)
+    {
+        if (DiagramAt(p) is not { } hit) return false;
+        var r = hit.Run;
+        if (r.LocalButton.Contains(hit.Local) || (!r.LocalHint.IsEmpty && r.LocalHint.Contains(hit.Local)))
+        {
+            DiagramOpenRequested?.Invoke(hit.Element.Source);
+            return true;
+        }
+        if (r.Overflow && !r.LocalTrack.IsEmpty && r.LocalTrack.Contains(hit.Local))
+        {
+            // Klick neben den Griff springt dorthin, dann ziehen
+            double frac = Math.Clamp((hit.Local.X - r.LocalTrack.X) / Math.Max(1, r.LocalTrack.Width), 0, 1);
+            double thumbFrac = r.VisibleWidth / Math.Max(1, r.ContentWidth);
+            double cur = DiagramScroll(hit.Element.Hash) / Math.Max(1, r.ScrollMax);
+            double thumbStart = cur * (1 - thumbFrac), thumbEnd = thumbStart + thumbFrac;
+            if (frac < thumbStart || frac > thumbEnd)
+                ScrollDiagram(hit, (frac - thumbFrac / 2) / Math.Max(0.0001, 1 - thumbFrac) * r.ScrollMax);
+            _dragDiagram = hit.Element.Hash;
+            _dragStartX = p.X;
+            _dragStartOff = DiagramScroll(hit.Element.Hash);
+            TextArea.CaptureMouse();
+            return true;
+        }
+        return false;
+    }
+
+    void OnAreaPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragDiagram is not { } hash) return;
+        var p = e.GetPosition(TextArea.TextView);
+        var hit = FindDiagramRun(hash);
+        if (hit != null)
+        {
+            var r = hit.Value.Run;
+            // Griff folgt der Maus: Weg auf der Leiste → Weg im Diagramm
+            double ratio = r.ContentWidth / Math.Max(1, r.VisibleWidth);
+            ScrollDiagram(hit.Value, _dragStartOff + (p.X - _dragStartX) * ratio);
+        }
+        e.Handled = true;
+    }
+
+    void OnAreaPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragDiagram == null) return;
+        _dragDiagram = null;
+        TextArea.ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+    DiagramHit? FindDiagramRun(int hash)
+    {
+        var view = TextArea.TextView;
+        if (!view.VisualLinesValid) view.EnsureVisualLines();
+        foreach (var vl in view.VisualLines)
+            foreach (var el in vl.Elements)
+                if (el is DiagramElement de && de.Hash == hash && (de.Run is { Drawn: true } ? de.Run : _lastDrawn.GetValueOrDefault(hash)) is { } run)
+                    return new DiagramHit(de, run, default, vl);
+        return null;
+    }
+
+    /// <summary>Umschalt+Mausrad über einem zu breiten Diagramm verschiebt es waagerecht.</summary>
+    bool DiagramWheel(MouseWheelEventArgs e)
+    {
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) == 0 || !LiveFormatting) return false;
+        if (DiagramAt(e.GetPosition(TextArea.TextView)) is not { Run.Overflow: true } hit) return false;
+        ScrollDiagram(hit, DiagramScroll(hit.Element.Hash) - e.Delta / 120.0 * 90);
+        return true;
+    }
+
+    /// <summary>Quelltext des Diagramms unter dem Cursor (oder darüber), sonst des ersten im Dokument – für Menü und Viewer.</summary>
+    public (string Source, int BlockFirst)? DiagramNearCaret(Func<Diagrams.Diagram, bool>? accept = null)
+    {
+        var doc = Document;
+        if (doc == null || !IsMarkdown) return null;
+        int caretLine = TextArea.Caret.Line;
+        var blocks = new List<MdLine>();
+        foreach (var b in Analysis.DiagramBlocks) if (b.Closed) blocks.Add(b);
+        blocks.Sort((x, y) => x.BlockFirst.CompareTo(y.BlockFirst));
+        var ordered = new List<MdLine>();
+        ordered.AddRange(blocks.FindAll(b => b.BlockFirst <= caretLine && caretLine <= b.BlockLast));
+        var above = blocks.FindAll(b => b.BlockLast < caretLine);
+        above.Reverse();
+        ordered.AddRange(above);
+        ordered.AddRange(blocks);
+        foreach (var b in ordered)
+        {
+            if (b.BlockLast - b.BlockFirst < 2 || b.BlockLast > doc.LineCount) continue;
+            int start = doc.GetLineByNumber(b.BlockFirst + 1).Offset;
+            int end = doc.GetLineByNumber(b.BlockLast).Offset;
+            string src = doc.GetText(start, end - start);
+            if (accept != null && !accept(Diagrams.MermaidParser.Parse(src))) continue;
+            return (src, b.BlockFirst);
+        }
+        return null;
+    }
+
     // ───────────────────────────── kleine Animationen (Aufdecken, Checkbox) ─────────────────────────────
 
     public double CheckProgress(int lineNumber)
@@ -511,6 +688,11 @@ public sealed class FolioEditor : TextEditor
     {
         if (!LiveFormatting) return;
         var p = e.GetPosition(TextArea.TextView);
+        if (DiagramMouseDown(p))
+        {
+            e.Handled = true;
+            return;
+        }
         if (WidgetAt(p) is { } w && Mode != EditorMode.Source)
         {
             ToggleTask(w.LineNumber);
@@ -529,8 +711,20 @@ public sealed class FolioEditor : TextEditor
 
     void OnAreaMouseMove(object sender, MouseEventArgs e)
     {
-        if (!LiveFormatting) { TextArea.Cursor = null; return; }
+        if (!LiveFormatting) { TextArea.Cursor = null; SetHover(null, false); return; }
+        if (_dragDiagram != null) return;
         var p = e.GetPosition(TextArea.TextView);
+        if (DiagramAt(p) is { } dh)
+        {
+            var r = dh.Run;
+            bool onButton = r.LocalButton.Contains(dh.Local);
+            bool active = onButton || (!r.LocalHint.IsEmpty && r.LocalHint.Contains(dh.Local))
+                          || (r.Overflow && !r.LocalTrack.IsEmpty && r.LocalTrack.Contains(dh.Local));
+            SetHover(dh.Element.Hash, onButton);
+            TextArea.Cursor = active ? Cursors.Hand : null;
+            return;
+        }
+        SetHover(null, false);
         bool hand = WidgetAt(p) != null
                     || ((Mode == EditorMode.Read || (Keyboard.Modifiers & ModifierKeys.Control) != 0) && LinkAt(p) != null);
         TextArea.Cursor = hand ? Cursors.Hand : null;
@@ -699,6 +893,7 @@ public sealed class FolioEditor : TextEditor
             e.Handled = true;
             return;
         }
+        if (DiagramWheel(e)) { e.Handled = true; return; }
         if (_scroll == null || (Keyboard.Modifiers & ModifierKeys.Shift) != 0) return;
         if (!_scrolling) _scrollTarget = _scroll.VerticalOffset;
         int lines = SystemParameters.WheelScrollLines > 0 ? SystemParameters.WheelScrollLines : 3;
@@ -779,6 +974,7 @@ public sealed class FolioEditor : TextEditor
     {
         _brushes.Clear();
         _pens.Clear();
+        _fadeLeft = _fadeRight = null;
         var t = ThemeManager.Current;
         Foreground = Brush(t.Text);
         TextArea.SelectionBrush = Brush(t.Selection);
@@ -817,6 +1013,25 @@ public sealed class FolioEditor : TextEditor
             _brushes[c] = b;
         }
         return b;
+    }
+
+    public SolidColorBrush Brush(Color c, double alpha) => Brush(ThemeManager.WithAlpha(c, (byte)Math.Clamp(255 * alpha, 0, 255)));
+
+    LinearGradientBrush? _fadeLeft, _fadeRight;
+
+    /// <summary>Weicher Übergang zur Papierfarbe am Rand eines verschiebbaren Diagramms.</summary>
+    public LinearGradientBrush EdgeFade(bool left)
+    {
+        if (left ? _fadeLeft == null : _fadeRight == null)
+        {
+            var p = ThemeManager.Current.Paper;
+            var solid = ThemeManager.WithAlpha(p, 255);
+            var clear = ThemeManager.WithAlpha(p, 0);
+            var b = new LinearGradientBrush(left ? solid : clear, left ? clear : solid, 0);
+            b.Freeze();
+            if (left) _fadeLeft = b; else _fadeRight = b;
+        }
+        return left ? _fadeLeft! : _fadeRight!;
     }
 
     public Pen Pen(Color c, double thickness, bool round = false)

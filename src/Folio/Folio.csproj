@@ -11,7 +11,7 @@
     <StartupObject>Folio.Program</StartupObject>
     <ApplicationIcon>Assets\folio.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.2</Version>
+    <Version>0.2.0</Version>
     <Product>Folio</Product>
     <Description>Folio – Notizen und Markdown</Description>
     <SatelliteResourceLanguages>de</SatelliteResourceLanguages>

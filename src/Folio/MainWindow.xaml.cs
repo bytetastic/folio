@@ -102,6 +102,7 @@ public partial class MainWindow : Window
 
         if (FolioEditor.Perf("noshadow")) PaperShadow.Effect = null;
         WireHelp();
+        WireViewer();
         OnThemeChanged();
         SyncThemeButton();
     }
@@ -206,6 +207,16 @@ public partial class MainWindow : Window
                 case "toast": ShowToast("Gespeichert"); break;
                 case "save": _ = Save(_current); break;
                 case var b when b.StartsWith("bpmn:"): _ = ExportBpmn(b[5..]); break;
+                case var i when i.StartsWith("image:"): _ = ExportDiagramImage(i[6..]); break;
+                case var v when v.StartsWith("viewer"):
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                    {
+                        if (_editor.DiagramNearCaret(d => d is not Diagrams.DiagramError) is { } f) OpenViewer(f.Source);
+                        // viewer:zoom=1.5 → nach dem Einpassen auf eine feste Stufe (für Testbilder)
+                        if (v.Contains("zoom=") && double.TryParse(v[(v.IndexOf("zoom=") + 5)..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var z))
+                            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => _viewer?.ZoomBy(z, animate: false)));
+                    }));
+                    break;
                 case var l when l.StartsWith("line") && int.TryParse(l[4..], out var ln):
                     _editor.CaretOffset = _editor.Document.GetLineByNumber(Math.Clamp(ln, 1, _editor.Document.LineCount)).Offset;
                     _editor.ScrollTo(ln, 0);
@@ -405,6 +416,7 @@ public partial class MainWindow : Window
 
     void OnThemeChanged()
     {
+        if (ViewerOpen) RefreshViewer(keepView: true);
         _search.MarkerBrush = new SolidColorBrush(ThemeManager.WithAlpha(ThemeManager.Current.Amber, 0x66));
         ApplyFrameTheme();
         SyncThemeButton();
@@ -552,6 +564,7 @@ public partial class MainWindow : Window
             if (key == Key.Escape) { _dialogResult?.TrySetResult(-1); e.Handled = true; }
             return;
         }
+        if (ViewerKey(key, mods)) { e.Handled = true; return; }
         if (mods == ModifierKeys.None && key == Key.F1) { ToggleHelp(); e.Handled = true; return; }
         if (mods == ModifierKeys.Control)
         {
@@ -603,6 +616,12 @@ public partial class MainWindow : Window
         AddSeparator();
         AddMenu("", "Notizen-Ordner öffnen", null, OpenNotesFolder);
         AddMenu("", "Ablauf als BPMN exportieren (Camunda) …", null, () => _ = ExportBpmn());
+        AddMenu("", "Diagramm vergrößern", null, () =>
+        {
+            if (_editor.DiagramNearCaret(d => d is not Diagrams.DiagramError) is { } f) OpenViewer(f.Source);
+            else _ = ShowDialog("Kein Diagramm gefunden", "Setz den Cursor in einen ```mermaid-Block.", null, "OK");
+        });
+        AddMenu("", "Diagramm als Bild speichern (PNG/SVG) …", null, () => _ = ExportDiagramImage());
         AddMenu("", "Notizen-Ordner ändern …", null, () => _ = ChangeNotesFolder());
         if (_current?.FilePath != null) AddMenu("", "Im Explorer zeigen", null, () => RevealInExplorer(_current.FilePath));
         AddSeparator();

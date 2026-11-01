@@ -24,6 +24,8 @@ public static class DiagramTests
         run("Unbekannte Art", Unknown);
         run("Mermaid-Kopf mit title", FrontTitle);
         run("BPMN: Bahnen-Beispiel vollständig und verknüpft", BpmnOrder);
+        run("Bild: SVG gültig, Zahlen mit Punkt, Verlauf, Strichelung", SvgExport);
+        run("Bild: PNG in doppelter Auflösung", PngExport);
         run("BPMN: ohne Bahnen, Schleife, Sonderzeichen", BpmnPlain);
     }
 
@@ -262,6 +264,75 @@ public static class DiagramTests
         var xml = BpmnExport.ToXml(c, c.Title!, "0.2.0");
         if (!xml.Contains("name=\"Online-Bestellung abwickeln\"")) throw new Exception("Titel fehlt im BPMN");
     }
+
+    /// <summary>WPF-Zeichnungen brauchen einen STA-Thread.</summary>
+    static void Sta(Action a)
+    {
+        Exception? err = null;
+        var th = new System.Threading.Thread(() => { try { a(); } catch (Exception ex) { err = ex; } });
+        th.SetApartmentState(System.Threading.ApartmentState.STA);
+        th.Start();
+        th.Join();
+        if (err != null) throw err;
+    }
+
+    static System.Windows.Media.Drawing SampleDrawing()
+    {
+        var g = new System.Windows.Media.DrawingGroup();
+        using (var dc = g.Open())
+        {
+            var fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 0x40, 0x60, 0xE0));
+            var pen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.Gray, 1.5) { DashStyle = new System.Windows.Media.DashStyle(new[] { 3.5, 3.0 }, 0) };
+            dc.DrawRoundedRectangle(fill, pen, new System.Windows.Rect(10.25, 10.5, 120, 60), 8, 8);
+            dc.DrawEllipse(null, new System.Windows.Media.Pen(System.Windows.Media.Brushes.Black, 1), new System.Windows.Point(200, 40), 20, 12);
+            var grad = new System.Windows.Media.LinearGradientBrush(System.Windows.Media.Colors.Blue, System.Windows.Media.Colors.White, 90);
+            dc.DrawRectangle(grad, null, new System.Windows.Rect(240, 10, 30, 70));
+            dc.PushTransform(new System.Windows.Media.TranslateTransform(5.5, 90));
+            var ft = new System.Windows.Media.FormattedText("Prüfen", System.Globalization.CultureInfo.InvariantCulture, System.Windows.FlowDirection.LeftToRight,
+                new System.Windows.Media.Typeface("Segoe UI"), 14, System.Windows.Media.Brushes.Black, 1.0);
+            dc.DrawText(ft, new System.Windows.Point(0, 0));
+            dc.Pop();
+        }
+        g.Freeze();
+        return g;
+    }
+
+    static void SvgExport() => Sta(() =>
+    {
+        var old = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE"); // Komma als Dezimalzeichen darf nicht durchschlagen
+        try
+        {
+            string svg = DiagramImageExport.ToSvg(SampleDrawing(), new System.Windows.Size(300, 120));
+            var doc = System.Xml.Linq.XDocument.Parse(svg);
+            System.Xml.Linq.XNamespace S = "http://www.w3.org/2000/svg";
+            Eq("svg", doc.Root!.Name.LocalName, "Wurzel");
+            Eq("0 0 300 120", (string?)doc.Root.Attribute("viewBox"), "viewBox");
+            var paths = doc.Descendants(S + "path").ToList();
+            if (paths.Count < 4) throw new Exception($"zu wenige Pfade: {paths.Count}");
+            if (doc.Descendants(S + "linearGradient").Count() != 1) throw new Exception("Verlauf fehlt");
+            if (!paths.Any(p => p.Attribute("stroke-dasharray") != null)) throw new Exception("Strichelung fehlt");
+            if (!paths.Any(p => (string?)p.Attribute("fill-opacity") is { } o && o.StartsWith("0.7"))) throw new Exception("Deckkraft fehlt");
+            foreach (var p in paths)
+            {
+                string d = (string)p.Attribute("d")!;
+                if (d.Contains(',') || d.Contains("NaN") || d.Contains("∞")) throw new Exception("ungültige Zahl im Pfad: " + d[..Math.Min(60, d.Length)]);
+            }
+            // Text als Umriss: liegt im verschobenen Bereich (x ≥ 5.5, y ≥ 90)
+            if (!svg.Contains("matrix(1 0 0 1 5.5 90)")) throw new Exception("Verschiebung des Textes fehlt");
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = old; }
+    });
+
+    static void PngExport() => Sta(() =>
+    {
+        byte[] png = DiagramImageExport.ToPng(SampleDrawing(), new System.Windows.Size(300.4, 120), 2);
+        if (png.Length < 100 || png[0] != 0x89 || png[1] != (byte)'P') throw new Exception("kein PNG");
+        int w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
+        int h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
+        Eq(601, w, "Breite doppelt (aufgerundet)");
+        Eq(240, h, "Höhe doppelt");
+    });
 
     static void Unknown()
     {

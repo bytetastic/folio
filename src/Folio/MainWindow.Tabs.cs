@@ -150,6 +150,7 @@ public partial class MainWindow
         if (previous != null) RememberView(previous);
         _current = tab;
         if (_infoForTab) HideInfo(); // Installieren- und Update-Hinweise bleiben beim Tabwechsel stehen
+        CloseViewer(); // der Viewer zeigt ein Diagramm des bisherigen Tabs
 
         _editor.Show(tab.Document, tab.Extension, tab.Mode);
         _editor.WrapCode = _settings.WordWrap;

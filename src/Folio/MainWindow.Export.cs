@@ -9,31 +9,26 @@ using Microsoft.Win32;
 
 namespace Folio;
 
-/// <summary>Ablaufdiagramm als BPMN 2.0 (.bpmn) exportieren – zum Öffnen im Camunda Modeler.</summary>
+/// <summary>
+/// Diagramme exportieren: Ablaufdiagramme als BPMN 2.0 (.bpmn, zum Öffnen im Camunda Modeler),
+/// jedes Diagramm als PNG oder SVG.
+/// </summary>
 public partial class MainWindow
 {
+    /// <summary>Name für Pool, Dateiname und Viewer: Diagrammtitel → Überschrift darüber → irgendeine Überschrift → Dateiname → „Prozess“.</summary>
+    string DiagramName(Diagram d, int blockFirst)
+    {
+        var doc = _editor.Document;
+        string? fileName = _current?.FilePath is { } fp ? Path.GetFileNameWithoutExtension(fp) : null;
+        return d.Title ?? HeadingAbove(blockFirst) ?? HeadingAbove(doc.LineCount + 1) ?? fileName ?? (d is FlowChart ? "Prozess" : "Diagramm");
+    }
+
     /// <summary>Das Ablaufdiagramm unter (oder über) dem Cursor, sonst das erste im Dokument.</summary>
     (FlowChart Chart, string Name)? FindFlowChart()
     {
-        var doc = _editor.Document;
-        if (doc == null || !_editor.IsMarkdown) return null;
-        var a = _editor.Analysis;
-        int caretLine = _editor.TextArea.Caret.Line;
-        var blocks = a.DiagramBlocks.Where(b => b.Closed).OrderBy(b => b.BlockFirst).ToList();
-        var ordered = blocks.Where(b => b.BlockFirst <= caretLine && caretLine <= b.BlockLast)
-            .Concat(blocks.Where(b => b.BlockLast < caretLine).Reverse())
-            .Concat(blocks);
-        foreach (var b in ordered)
-        {
-            if (b.BlockLast - b.BlockFirst < 2 || b.BlockLast > doc.LineCount) continue;
-            int start = doc.GetLineByNumber(b.BlockFirst + 1).Offset;
-            int end = doc.GetLineByNumber(b.BlockLast).Offset;
-            if (MermaidParser.Parse(doc.GetText(start, end - start)) is not FlowChart chart || chart.Nodes.Count == 0) continue;
-            // Poolname: Diagrammtitel → Überschrift darüber → sonst eine Überschrift weiter unten → Dateiname → „Prozess“
-            string? fileName = _current?.FilePath is { } fp ? Path.GetFileNameWithoutExtension(fp) : null;
-            return (chart, chart.Title ?? HeadingAbove(b.BlockFirst) ?? HeadingAbove(doc.LineCount + 1) ?? fileName ?? "Prozess");
-        }
-        return null;
+        if (_editor.DiagramNearCaret(d => d is FlowChart { Nodes.Count: > 0 }) is not { } found) return null;
+        var chart = (FlowChart)MermaidParser.Parse(found.Source);
+        return (chart, DiagramName(chart, found.BlockFirst));
     }
 
     string? HeadingAbove(int line)
@@ -48,6 +43,15 @@ public partial class MainWindow
         return null;
     }
 
+    static string SafeFileName(string name, string fallback)
+    {
+        string safe = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? ' ' : c)).Trim();
+        return safe.Length > 0 ? safe : fallback;
+    }
+
+    string ExportFolder() =>
+        _current?.FilePath is { } p ? Path.GetDirectoryName(p)! : NotesFolderOrNull() ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
     async Task ExportBpmn(string? targetPath = null)
     {
         var found = FindFlowChart();
@@ -58,18 +62,21 @@ public partial class MainWindow
                 null, "OK");
             return;
         }
-        var (chart, name) = found.Value;
+        await ExportBpmn(found.Value.Chart, found.Value.Name, targetPath);
+    }
+
+    async Task ExportBpmn(FlowChart chart, string name, string? targetPath = null)
+    {
         string path;
         if (targetPath != null) path = targetPath;
         else
         {
-            string safe = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? ' ' : c)).Trim();
             var dlg = new SaveFileDialog
             {
                 Title = "Als BPMN für Camunda exportieren",
                 Filter = "BPMN 2.0 (*.bpmn)|*.bpmn|XML (*.xml)|*.xml",
-                FileName = (safe.Length > 0 ? safe : "Prozess") + ".bpmn",
-                InitialDirectory = _current?.FilePath is { } p ? Path.GetDirectoryName(p) : NotesFolderOrNull() ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                FileName = SafeFileName(name, "Prozess") + ".bpmn",
+                InitialDirectory = ExportFolder(),
                 DefaultExt = ".bpmn",
                 AddExtension = true,
             };
@@ -87,5 +94,62 @@ public partial class MainWindow
             AppPaths.Log("BPMN-Export: " + ex);
             await ShowDialog("Export fehlgeschlagen", ex.Message, null, "OK");
         }
+    }
+
+    /// <summary>Diagramm unter dem Cursor als Bild (Menü).</summary>
+    async Task ExportDiagramImage(string? targetPath = null)
+    {
+        if (_editor.DiagramNearCaret(d => d is not DiagramError) is not { } found)
+        {
+            await ShowDialog("Kein Diagramm gefunden",
+                "Gespeichert wird ein ```mermaid-Block. Setz den Cursor in das Diagramm, das du als Bild speichern willst.", null, "OK");
+            return;
+        }
+        var d = MermaidParser.Parse(found.Source);
+        await ExportImage(found.Source, DiagramName(d, found.BlockFirst), null, targetPath);
+    }
+
+    /// <summary>Als PNG (doppelte Auflösung) oder SVG speichern. <paramref name="format"/> „png“/„svg“ wählt den Typ im
+    /// Dialog vor; bei <paramref name="targetPath"/> entscheidet die Endung (für Tests ohne Dialog).</summary>
+    async Task ExportImage(string source, string name, string? format, string? targetPath = null)
+    {
+        string path;
+        if (targetPath != null) path = targetPath;
+        else
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = "Diagramm als Bild speichern",
+                Filter = "PNG-Bild (*.png)|*.png|SVG-Vektorgrafik (*.svg)|*.svg",
+                FilterIndex = format == "svg" ? 2 : 1,
+                FileName = SafeFileName(name, "Diagramm") + (format == "svg" ? ".svg" : ".png"),
+                InitialDirectory = ExportFolder(),
+                AddExtension = true,
+            };
+            if (dlg.ShowDialog(this) != true) return;
+            path = dlg.FileName;
+        }
+        try
+        {
+            var pic = _editor.GetDiagram(source, 1e5);
+            var drawing = DiagramImageExport.Compose(pic.Parts.Select(p => p.Drawing));
+            if (Path.GetExtension(path).Equals(".svg", StringComparison.OrdinalIgnoreCase))
+                TextFiles.Write(path, DiagramImageExport.ToSvg(drawing, pic.Size), TextFiles.Utf8NoBom);
+            else
+                WriteBytesAtomic(path, DiagramImageExport.ToPng(drawing, pic.Size, 2));
+            ShowToast($"Gespeichert: {Path.GetFileName(path)}");
+        }
+        catch (Exception ex)
+        {
+            AppPaths.Log("Bild-Export: " + ex);
+            await ShowDialog("Speichern fehlgeschlagen", ex.Message, null, "OK");
+        }
+    }
+
+    static void WriteBytesAtomic(string path, byte[] bytes)
+    {
+        string tmp = path + ".folio-tmp";
+        File.WriteAllBytes(tmp, bytes);
+        File.Move(tmp, path, true);
     }
 }

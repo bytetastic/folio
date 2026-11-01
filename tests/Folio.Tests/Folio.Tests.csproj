@@ -17,6 +17,7 @@
     <Compile Include="..\..\src\Folio\Diagrams\Durations.cs" Link="Src\Durations.cs" />
     <Compile Include="..\..\src\Folio\Diagrams\DiagramModel.cs" Link="Src\DiagramModel.cs" />
     <Compile Include="..\..\src\Folio\Diagrams\MermaidParser.cs" Link="Src\MermaidParser.cs" />
+    <Compile Include="..\..\src\Folio\Diagrams\DiagramImageExport.cs" Link="Src\DiagramImageExport.cs" />
   </ItemGroup>
 
   <ItemGroup>
